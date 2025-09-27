@@ -19,3 +19,7 @@ unstructured
 numpy
 pandas
 requests
+
+fastapi
+uvicorn[standard]
+scikit-learn

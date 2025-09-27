@@ -36,45 +36,57 @@ Please provide the most accurate response based on the question
 Questions:{input}
 """)
 
-# Vector embedding function using HuggingFace embeddings
-def vector_embedding():
-    if "vectors" not in st.session_state:
-        # Check if cached vectors exist
-        try:
-            with open("vectors.pkl", "rb") as f:
-                st.session_state.vectors = pickle.load(f)
-                st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                st.write("Loaded vectors from cache.")
-                return
-        except FileNotFoundError:
-            pass
+# Initialize vector search and embeddings from documents (only when explicitly requested)
+def initialize_vector_search():
+    # Avoid re-initializing during the same session
+    if st.session_state.get("initialized"):
+        st.write("Vector store already initialized in this session.")
+        return
 
-        # Initialize embeddings
-        st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # If vectors exist in session state, assume initialized
+    if "vectors" in st.session_state:
+        st.session_state["initialized"] = True
+        st.write("Vector store available in session.")
+        return
 
-        # Load PDFs from folder
-        st.session_state.loader = PyPDFDirectoryLoader("./industrial")
-        st.session_state.docs = st.session_state.loader.load()
+    # Check if cached vectors exist on disk
+    try:
+        with open("vectors.pkl", "rb") as f:
+            st.session_state.vectors = pickle.load(f)
+            st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            st.session_state["initialized"] = True
+            st.write("Loaded vectors from cache.")
+            return
+    except FileNotFoundError:
+        pass
 
-        # Split documents into chunks
-        st.session_state.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        st.session_state.final_documents = st.session_state.text_splitter.split_documents(st.session_state.docs[:20])
+    # Initialize embeddings
+    st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        # Create FAISS vector store
-        st.session_state.vectors = FAISS.from_documents(st.session_state.final_documents, st.session_state.embeddings)
+    # Load PDFs from folder (documents only — do NOT add user prompts)
+    loader = PyPDFDirectoryLoader("./industrial")
+    docs = loader.load()
 
-        # Cache vectors locally
-        with open("vectors.pkl", "wb") as f:
-            pickle.dump(st.session_state.vectors, f)
+    # Split documents into chunks
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    final_documents = text_splitter.split_documents(docs[:20])
 
-        st.write("Vector Store DB is ready.")
+    # Create FAISS vector store from documents
+    st.session_state.vectors = FAISS.from_documents(final_documents, st.session_state.embeddings)
+
+    # Cache vectors locally
+    with open("vectors.pkl", "wb") as f:
+        pickle.dump(st.session_state.vectors, f)
+
+    st.session_state["initialized"] = True
+    st.write("Vector Store DB is ready.")
 
 # Streamlit input for user question
 prompt1 = st.text_input("Enter Your Question From Documents")
 
-# Button to run document embedding
+# Button to run document embedding (initialize only once)
 if st.button("Documents Embedding"):
-    vector_embedding()
+    initialize_vector_search()
 
 # Handle question answering
 if prompt1:
