@@ -5,9 +5,7 @@ Provides CLI interface for running different components.
 import streamlit as st
 from langchain_groq import ChatGroq
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -93,23 +91,23 @@ if prompt1:
     if "vectors" not in st.session_state:
         st.warning("Please embed documents first!")
     else:
-        # Create document chain
-        document_chain = create_stuff_documents_chain(llm, prompt)
-
-        # Create retriever
         retriever = st.session_state.vectors.as_retriever()
-        retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-        # Run the chain and measure response time
+        # Retrieve relevant documents
         start = time.process_time()
-        response = retrieval_chain.invoke({'input': prompt1})
-        st.write(f"Response time: {time.process_time() - start:.2f} seconds")
+        retrieved_docs = retriever.invoke(prompt1)
+        context_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
 
-        # Display answer
-        st.write(response['answer'])
+        # Generate answer using the prompt and LLM
+        chain = prompt | llm
+        llm_response = chain.invoke({"context": context_text, "input": prompt1})
+        elapsed = time.process_time() - start
+        st.write(f"Response time: {elapsed:.2f} seconds")
 
-        # Display document similarity search
+        answer_text = getattr(llm_response, "content", str(llm_response))
+        st.write(answer_text)
+
         with st.expander("Document Similarity Search"):
-            for i, doc in enumerate(response.get("context", [])):
+            for doc in retrieved_docs:
                 st.write(doc.page_content)
                 st.write("--------------------------------")
