@@ -59,7 +59,12 @@ def initialize_vector_search():
         pass
 
     # Initialize embeddings
-    st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    try:
+        st.session_state.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    except ImportError as exc:
+        st.error("sentence-transformers is required. Install with `pip install sentence-transformers` and restart the app.")
+        st.session_state["initialized"] = False
+        raise
 
     # Load PDFs from folder (documents only — do NOT add user prompts)
     loader = PyPDFDirectoryLoader("./industrial")
